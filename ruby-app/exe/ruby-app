@@ -3,11 +3,6 @@
 
 $LOAD_PATH.unshift File.expand_path(File.join(__FILE__,"../../lib"))
 
-puts "*" * 80
-pp $LOAD_PATH 
-puts "*" * 80
-
-
 require "ruby/app"
 
 Ruby::App::Main.run

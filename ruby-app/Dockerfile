@@ -1,24 +1,29 @@
 #
-# The first two stages are all happening during the dev-teams CI/CD process 
-# in their github workflow. This is where they generate the *.tgz and ship it
-# off to artifactory. In my example We do that work inside a AL2023 container
+# The first two stages are all happening during the dev-teams CI/CD process,
+# during their github workflow, This is where they generate the *.tgz and ship it
+# off to artifactory. In my example we do that work inside a AL2023 container
 # so that any linking against native libraries is compatible with the gold image
-# we eventually marry the *.tgz to. So what follows below in stage 1-2 is ruby 
-# specific.  Stage 3 is the platforms supplied portion and it's the same for all
-# languages.  We would provide the specification for the *.tgz but the dev-teams
-# could do anything that met that specifiction.  I do assume we'd provide samples
-# for all the standard supported langes.
+# that we eventually marry the *.tgz file to.
+#
 
 #
-# This is my example of meeting that unwrittn specification. I separate it into
-# two stages. 'stage1' contains all the steps that would be common to every ruby
-# app and 'stage2' contains all the steps that are unique the app being built.
+# So what follows below in stage 1-2 is ruby specific example but stage 3 is the
+# our plaatform-team supplied portion that's generic for all languages. We would
+# provide the specification for the *.tgz but the dev-teams could do anything that
+# met that specifiction.  I do assume we'd provide samples for the preferred,
+# supported languages.
+#
+
+#
+# I separate the ruby specific portion into two stages.  The first stage contains 
+# all the steps that would be common to every ruby app and the Second stage has all
+# the steps unique to the app currently being built.
 #
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS stage1
 
-# This step installs all the platorm development tools and libraries. They never
-# change between ruby apps and we always need them.
+# This step installs all the platorm development tools and libraries. These never
+# change from one ruby app to the next.
 RUN dnf update -y \
  && dnf group install -y 'Development Tools' \
  && dnf install -y findutils \
@@ -73,7 +78,8 @@ RUN mkdir -p out/vendor \
  && cp launch.sh out/launch.sh \
  && tar -czf /tmp/app.tar.gz -C ./out .
 
-# This step would ship the *.tgz to Artifactory.  Faking this step for now.
+# This step would ship the *.tgz to Artifactory.  I haven't finished it yet.
+# so for now stage3 just copies the *.tgz from stage2.
 RUN --mount=type=secret,id=token,env=TOKEN \
     echo "${TOKEN}"
 
@@ -85,9 +91,7 @@ RUN --mount=type=secret,id=token,env=TOKEN \
 # **NOTE** There doesn't have to be anything language platform specific about this
 # step. If we managed a *.rpm repo mirror we could allow the devteams to include a list
 # of packages in a text file that we enumerate over and install.  The packages could
-# only come from that controlled mirror with pre-approved/scanned packages.  We could
-# prescan these etc.  It's what I'm doing in this example with the `.a2i/packages.*`
-# files.
+# only come from that controlled mirror with pre-approved/scanned packages.
 #
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS stage3

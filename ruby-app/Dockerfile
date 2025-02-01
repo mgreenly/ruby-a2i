@@ -111,7 +111,6 @@ RUN dnf update -y \
       findutils \
  && xargs -a /tmp/packages.prod dnf install -y \
  && dnf clean -y all \
- && gem install bundler -v 2.6.2 \
  && chown -R 1000:1000 /opt/app-root \
  && tar -xzpf /tmp/app.tar.gz -C /opt/app-root \
  && rm /tmp/app.tar.gz

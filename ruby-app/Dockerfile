@@ -71,7 +71,6 @@ RUN --mount=type=secret,id=token,env=TOKEN \
 # files.
 #
 
-#
 FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS final
 
 COPY --from=build /tmp/app.tar.gz /tmp/app.tar.gz

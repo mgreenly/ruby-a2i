@@ -85,13 +85,16 @@ RUN --mount=type=secret,id=token,env=TOKEN \
 
 #
 # What follows here is just an example of extracting and using the *.tgz.  I
-# will move this into a seprate docker process to better mirror what we'll be
-# doing before before hand over the my suggested ruby pipeline.
+# will evntually move this into a seprate docker process to better mirror what 
+# we'll be doing in the future.
 #
 # **NOTE** There doesn't have to be anything language platform specific about this
 # step. If we managed a *.rpm repo mirror we could allow the devteams to include a list
 # of packages in a text file that we enumerate over and install.  The packages could
-# only come from that controlled mirror with pre-approved/scanned packages.
+# only come from that controlled mirror that contains pre-approved/scanned packages.
+#
+# Although personally I'd suggest we just mirror the official repo so that we could
+# yank stuff if there's a CVE and AWS doesn't act quick enough.
 #
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS stage3

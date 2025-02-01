@@ -9,22 +9,24 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
 
 # This step adds all the files we need to build the app.
-COPY ./.bundle            /opt/app-root/.bundle
-COPY ./bin                /opt/app-root/bin
-COPY ./exe                /opt/app-root/exe
-COPY ./lib                /opt/app-root/lib
-COPY ./vendor             /opt/app-root/vendor
-COPY ./ruby-app.gemspec   /opt/app-root/ruby-app.gemspec
-COPY ./Gemfile            /opt/app-root/Gemfile
-COPY ./Gemfile.lock       /opt/app-root/Gemfile.lock
-COPY ./launch.sh          /opt/app-root/launch.sh
+COPY ./.bundle                 /opt/app-root/.bundle
+COPY ./bin                     /opt/app-root/bin
+COPY ./exe                     /opt/app-root/exe
+COPY ./lib                     /opt/app-root/lib
+COPY ./vendor                  /opt/app-root/vendor
+COPY ./ruby-app.gemspec        /opt/app-root/ruby-app.gemspec
+COPY ./Gemfile                 /opt/app-root/Gemfile
+COPY ./Gemfile.lock            /opt/app-root/Gemfile.lock
+COPY ./launch.sh               /opt/app-root/launch.sh
+COPY ./.a2i/packages.prod      /opt/app-root/packages.prod
+COPY ./.a2i/packages.dev       /opt/app-root/packages.dev
 
 # This step install all the development tools and libraries we need to build the app.
 RUN dnf update -y \
  && dnf group install -y 'Development Tools' \
- && dnf install -y \
-      ruby \
-      mariadb105-devel \
+ && dnf install -y findutils \
+ && xargs -a /opt/app-root/packages.prod dnf install -y \
+ && xargs -a /opt/app-root/packages.dev dnf install -y \
  && dnf clean -y all \
  && gem install bundler -v 2.6.2 
 
@@ -55,19 +57,25 @@ RUN mkdir -p out/vendor \
 RUN --mount=type=secret,id=token,env=TOKEN \
     echo "${TOKEN}"
 
+
 #
-# There doesn't have to be anything language platform specific about the images
-# that run *.tgz based artifacts except the list of packages they install. If
-# we could figure out how to let the user specificy a list of packages they need
-# but require they come front a controlled repo for example we could support
-# every language platform supported by Amazon Linux with no additional effort.
+# What follows here is just an example of extracting and using the *.tgz.  I
+# will move this into a seprate docker process to better mirror what we'll be
+# doing before before hand over the my suggested ruby pipeline.
 #
-# The artifact could simply have a `packages` file that we try to install but
-# that process only succeeds if the packages exist in our controlled mirror.
+# **NOTE** There doesn't have to be anything language platform specific about this
+# step. If we managed a *.rpm repo mirror we could allow the devteams to include a list
+# of packages in a text file that we enumerate over and install.  The packages could
+# only come from that controlled mirror with pre-approved/scanned packages.  We could
+# prescan these etc.  It's what I'm doing in this example with the `.a2i/packages.*`
+# files.
+#
+
 #
 FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS final
 
 COPY --from=build /tmp/app.tar.gz /tmp/app.tar.gz
+COPY --from=build /opt/app-root/packages.prod /tmp/packages.prod
 
 WORKDIR /opt/app-root
 
@@ -75,8 +83,8 @@ RUN dnf update -y \
  && dnf install -y \
       tar \
       gzip \
-      ruby \
-      mariadb105 \
+      findutils \
+ && xargs -a /tmp/packages.prod dnf install -y \
  && dnf clean -y all \
  && gem install bundler -v 2.6.2 \
  && chown -R 1000:1000 /opt/app-root \

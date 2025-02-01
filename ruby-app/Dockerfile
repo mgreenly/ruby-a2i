@@ -60,7 +60,7 @@ RUN chown -R 1000:1000 /opt/app-root
 USER 1000:1000
 WORKDIR /opt/app-root
 
-# This step uses thepreviously installed native dev tools and libs to build the app
+# This step uses the previously installed native dev tools and libs to build the app
 RUN bundle config --local deployment true \
  && bundle config --local without "development test" \
  && bundle install --local

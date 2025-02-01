@@ -1,10 +1,10 @@
 #
-# This step is all happening during the devteams CI/CD process in their
+# This step is all happening during the dev-teams CI/CD process in their
 # github workflow. This is where they generate the *.tgz and ship it off
 # to artifactory. We do it inside a AL2023 container so that any linking
 # against native libraries is compatible with the gold image we eventually
-# marry the *.tgz to.  So what follows below is ruby specific, but the
-# same thing could be done for every language platform.
+# marry the *.tgz to.  So what follows below in the first section is ruby
+# specific but the same thing could be done for every language platform.
 #
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
 
@@ -21,7 +21,7 @@ COPY ./launch.sh               /opt/app-root/launch.sh
 COPY ./.a2i/packages.prod      /opt/app-root/packages.prod
 COPY ./.a2i/packages.dev       /opt/app-root/packages.dev
 
-# This step install all the development tools and libraries we need to build the app.
+# This step installs all the development tools and libraries we need to build the app.
 RUN dnf update -y \
  && dnf group install -y 'Development Tools' \
  && dnf install -y findutils \
@@ -30,12 +30,12 @@ RUN dnf update -y \
  && dnf clean -y all \
  && gem install bundler -v 2.6.2 
 
-# This step sets up an environment that allwos us to build as a non-root user.
+# This step sets up a non-root environment to build the app in
 RUN chown -R 1000:1000 /opt/app-root
 USER 1000:1000
 WORKDIR /opt/app-root
 
-# This step uses the previously installed native dev tools and libs to bundle the gems
+# This step uses the previously installed native dev tools and libs to build the app
 RUN bundle config --local deployment true \
  && bundle config --local without "development test" \
  && bundle install --local
@@ -53,7 +53,7 @@ RUN mkdir -p out/vendor \
  && cp launch.sh out/launch.sh \
  && tar -czf /tmp/app.tar.gz -C ./out .
 
-# This step ships the *.tgz to Artifactory.
+# This step would ship the *.tgz to Artifactory.  Faking this step for now.
 RUN --mount=type=secret,id=token,env=TOKEN \
     echo "${TOKEN}"
 
@@ -94,5 +94,5 @@ RUN dnf update -y \
 USER 1000:1000
 WORKDIR /opt/app-root
 
-# the defined entrpoint for all *.tgz apps included by the dev team in teh artifact.
+# the defined entrpoint for all *.tgz apps included by the dev team in the artifact.
 ENTRYPOINT ["/usr/bin/sh", "-r", "-x", "/opt/app-root/launch.sh"]

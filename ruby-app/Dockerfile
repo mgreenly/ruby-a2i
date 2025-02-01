@@ -1,23 +1,23 @@
 #
-# The first two stages are all happening during the dev-teams CI/CD process,
-# during their github workflow, This is where they generate the *.tgz and ship it
-# off to artifactory. In my example we do that work inside a AL2023 container
-# so that any linking against native libraries is compatible with the gold image
-# that we eventually marry the *.tgz file to.
+# So what follows below in stage 1-2 is a ruby specific example. In this portion
+# dev-teams are free to do what ever they want as long as they deliver a *.tgz
+# that complies with a specification we provide.
 #
-
+# Here's a quick attempt at that spec....
 #
-# So what follows below in stage 1-2 is ruby specific example but stage 3 is the
-# our plaatform-team supplied portion that's generic for all languages. We would
-# provide the specification for the *.tgz but the dev-teams could do anything that
-# met that specifiction.  I do assume we'd provide samples for the preferred,
-# supported languages.
+#   * MUST use AL2023 as the base image for binary compatability.
+#   * MAY specify additional package dependencies in .a2i/packages.* files
+#   * Additional packages MUST be from the AWS AL2023 repository.
+#   * MUST include a 'launch.sh' script at the root directory.
+#   * The 'launch.sh' script MUST wait for the main process to exit.
+#   * The 'launch.sh' script MUST return the exit code of the main process.
+#   * All logging MUST be sent to stdout/stderr
 #
-
+# The above process supports every language platform that can run on linux without
+# any additional burden to our teams.
 #
-# I separate the ruby specific portion into two stages.  The first stage contains 
-# all the steps that would be common to every ruby app and the Second stage has all
-# the steps unique to the app currently being built.
+# Stage 3 is our part of the work.  A bit of pipeline that can add the *.tgz file
+# the dev teams create to a generic language agnostic base image.
 #
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS stage1

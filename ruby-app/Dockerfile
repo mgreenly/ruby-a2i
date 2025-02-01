@@ -8,7 +8,7 @@
 #
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
 
-# add all the files we need to build the app and its gems
+# This step adds all the files we need to build the app.
 COPY ./.bundle            /opt/app-root/.bundle
 COPY ./bin                /opt/app-root/bin
 COPY ./exe                /opt/app-root/exe
@@ -19,7 +19,7 @@ COPY ./Gemfile            /opt/app-root/Gemfile
 COPY ./Gemfile.lock       /opt/app-root/Gemfile.lock
 COPY ./launch.sh          /opt/app-root/launch.sh
 
-# Install all development libraries and tools, needed to compile native gems.
+# This step install all the development tools and libraries we need to build the app.
 RUN dnf update -y \
  && dnf group install -y 'Development Tools' \
  && dnf install -y \
@@ -28,15 +28,12 @@ RUN dnf update -y \
  && dnf clean -y all \
  && gem install bundler -v 2.6.2 
 
-# The build step should not be done as root so we create a user
-# environment to do the build in.
+# This step sets up an environment that allwos us to build as a non-root user.
 RUN chown -R 1000:1000 /opt/app-root
 USER 1000:1000
 WORKDIR /opt/app-root
 
-# This step uses the previously installed native dev tools. It first 
-# configures bundler than runs bundle install which will build build
-# any gems that use native system libraries.
+# This step uses the previously installed native dev tools and libs to bundle the gems
 RUN bundle config --local deployment true \
  && bundle config --local without "development test" \
  && bundle install --local
@@ -54,7 +51,7 @@ RUN mkdir -p out/vendor \
  && cp launch.sh out/launch.sh \
  && tar -czf /tmp/app.tar.gz -C ./out .
 
-# The final step ships the *.tgz to external storage
+# This step ships the *.tgz to Artifactory.
 RUN --mount=type=secret,id=token,env=TOKEN \
     echo "${TOKEN}"
 

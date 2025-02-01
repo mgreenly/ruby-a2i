@@ -10,7 +10,7 @@ default:
 	bundle lock --add-platform darwin
 	exit
 	bundle show
-	docker build --no-cache --secret id=token,env=TOKEN -t ruby-app:latest .
+	docker build --secret id=token,env=TOKEN -t ruby-app:latest .
 
 .PHONY: run
 run:

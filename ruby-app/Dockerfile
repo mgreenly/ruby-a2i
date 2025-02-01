@@ -1,12 +1,35 @@
 #
-# This step is all happening during the dev-teams CI/CD process in their
-# github workflow. This is where they generate the *.tgz and ship it off
-# to artifactory. We do it inside a AL2023 container so that any linking
-# against native libraries is compatible with the gold image we eventually
-# marry the *.tgz to.  So what follows below in the first section is ruby
-# specific but the same thing could be done for every language platform.
+# The first two stages are all happening during the dev-teams CI/CD process 
+# in their github workflow. This is where they generate the *.tgz and ship it
+# off to artifactory. In my example We do that work inside a AL2023 container
+# so that any linking against native libraries is compatible with the gold image
+# we eventually marry the *.tgz to. So what follows below in stage 1-2 is ruby 
+# specific.  Stage 3 is the platforms supplied portion and it's the same for all
+# languages.  We would provide the specification for the *.tgz but the dev-teams
+# could do anything that met that specifiction.  I do assume we'd provide samples
+# for all the standard supported langes.
+
 #
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
+# This is my example of meeting that unwrittn specification. I separate it into
+# two stages. 'stage1' contains all the steps that would be common to every ruby
+# app and 'stage2' contains all the steps that are unique the app being built.
+#
+
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS stage1
+
+# This step installs all the platorm development tools and libraries. They never
+# change between ruby apps and we always need them.
+RUN dnf update -y \
+ && dnf group install -y 'Development Tools' \
+ && dnf install -y findutils \
+ && dnf clean -y all
+
+#
+# For stage2 we'd actually grab the image from where ever we pushed it during
+# stage1, but this is just an example, so we're just using the result of the
+# previous stage.
+#
+FROM stage1 AS stage2
 
 # This step adds all the files we need to build the app.
 COPY ./.bundle                 /opt/app-root/.bundle
@@ -21,21 +44,18 @@ COPY ./launch.sh               /opt/app-root/launch.sh
 COPY ./.a2i/packages.prod      /opt/app-root/packages.prod
 COPY ./.a2i/packages.dev       /opt/app-root/packages.dev
 
-# This step installs all the development tools and libraries we need to build the app.
-RUN dnf update -y \
- && dnf group install -y 'Development Tools' \
- && dnf install -y findutils \
- && xargs -a /opt/app-root/packages.prod dnf install -y \
+# This step adds all the native packages unique to this app.
+RUN xargs -a /opt/app-root/packages.prod dnf install -y \
  && xargs -a /opt/app-root/packages.dev dnf install -y \
  && dnf clean -y all \
- && gem install bundler -v 2.6.2 
+ && gem install bundler -v 2.6.2
 
 # This step sets up a non-root environment to build the app in
 RUN chown -R 1000:1000 /opt/app-root
 USER 1000:1000
 WORKDIR /opt/app-root
 
-# This step uses the previously installed native dev tools and libs to build the app
+# This step uses thepreviously installed native dev tools and libs to build the app
 RUN bundle config --local deployment true \
  && bundle config --local without "development test" \
  && bundle install --local
@@ -57,7 +77,6 @@ RUN mkdir -p out/vendor \
 RUN --mount=type=secret,id=token,env=TOKEN \
     echo "${TOKEN}"
 
-
 #
 # What follows here is just an example of extracting and using the *.tgz.  I
 # will move this into a seprate docker process to better mirror what we'll be
@@ -71,10 +90,10 @@ RUN --mount=type=secret,id=token,env=TOKEN \
 # files.
 #
 
-FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS final
+FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS stage3
 
-COPY --from=build /tmp/app.tar.gz /tmp/app.tar.gz
-COPY --from=build /opt/app-root/packages.prod /tmp/packages.prod
+COPY --from=stage2 /tmp/app.tar.gz /tmp/app.tar.gz
+COPY --from=stage2 /opt/app-root/packages.prod /tmp/packages.prod
 
 WORKDIR /opt/app-root
 

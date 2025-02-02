@@ -42,7 +42,7 @@ ifneq ("", $(shell git status -z))
 	bundle cache --all-platforms
 	bundle show
 	docker build \
-		--secret id=token,env=TOKEN \
+		--secret id=credentials,src=$HOME/.aws/credentials \
 		--build-arg APPNAME=$(APPNAME) \
 		--build-arg RELEASE=true \
 		-t "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)" .
@@ -52,4 +52,4 @@ endif
 
 .PHONY: run
 run:
-	docker run -it --rm "localhost/$(APPNAME):$(TAGNAME)"
+	docker run -it --rm "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)"

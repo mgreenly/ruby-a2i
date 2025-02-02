@@ -56,8 +56,7 @@ COPY ./.a2i/packages.dev       /opt/app-root/packages.dev
 # This step adds all the native packages unique to this app.
 RUN xargs -a /opt/app-root/packages.prod dnf install -y \
  && xargs -a /opt/app-root/packages.dev dnf install -y \
- && dnf clean -y all \
- && gem install bundler -v 2.6.2
+ && dnf clean -y all
 
 # This step sets up a non-root environment to build the app in
 RUN chown -R 1000:1000 /opt/app-root

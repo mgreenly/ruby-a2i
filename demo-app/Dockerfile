@@ -23,6 +23,7 @@
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS stage1
 
+ARG RELEASE=false
 ARG APPNAME
 
 # This step installs all the platorm development tools and libraries. These never
@@ -80,10 +81,11 @@ RUN mkdir -p out/vendor \
  && cp launch.sh out/launch.sh \
  && tar -czf /tmp/app.tar.gz -C ./out .
 
-# This step would ship the *.tgz to Artifactory.  I haven't finished it yet.
-# so for now stage3 just copies the *.tgz from stage2.
-RUN --mount=type=secret,id=token,env=TOKEN \
-    echo "${TOKEN}"
+# This step would ship the *.tgz to Artifactory but I'm using S3 in my example
+RUN --mount=type=secret,id=token,env=TOKEN  \
+    if [ "${RELEASE}" = "true" ] ; then \
+      echo "... doing the release" ; \
+    fi
 
 #
 # What follows here is just an example of extracting and using the *.tgz.  I

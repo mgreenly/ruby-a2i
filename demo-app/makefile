@@ -16,7 +16,6 @@ default:
 .PHONY: release
 release: default
 	docker build \
-		--no-cache \
 		--secret id=token,env=TOKEN \
 		--build-arg APPNAME=$(APPNAME) \
 		-t "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)" \

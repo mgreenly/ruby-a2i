@@ -1,0 +1,82 @@
+#
+# This is a demo that extracts and runs a *.tar.gz packaged ruby app.
+#
+# This process is 100% language agnostic. My recomendation is that we provide
+# a specification for the delivery of application artifacts that are compatible
+# with a generic base image we control, instead of providing language specific
+# base images.
+#
+# There is a long list of benefits.
+#
+# We replace the significant effort of having to building and maintaining all of the
+# the language platform images with the single responsibility of providing the spec.
+# Although, I'd suggest we provide a centralized repo containing recomended and
+# supported workflows and foster a communitity from the expert internal users for
+# each of the recomended language platforms. Exposing the entire process to app devs is a
+# huge enabler that will help them in design better more efficient ci/cd process and
+# debugging thier own deployment issues. I assure everyone that doing this would provide
+# a huge boost to our customer satisfaction rating ;-)
+#
+# It removes us from being any kind of gateway as to which language platforms or tooling
+# are supported. These decisions can move to being fully controlled via proper governance 
+# paths. Under the hood the decisions are enforced by simply controlling what images and
+# packages are availe during the build.
+#
+# My suggestion is that we create automation to follow the AWS release schedule and 
+# encourage teams to do the same.  I'd suggest the pipeline assumes they're builds are
+# floating on the minor release and patch releases, but we allow them to pin to the 
+# minor release, and major releases are always opt in.
+#
+# Today I'm certain we have stuff deployed that we compile from source.  Of course I 
+# think we sould encourage teams to move away from tooling that makes this necessary
+# but we can still support it.  We publish the source built tooling the same repo.
+#
+# We can use the exact same process for containers and VMs.  We can just as easily
+# build a generic AMI that can run these *.tar.gz packages. This means replacing
+# our duplicative language platform piplines with a process where we don't really
+# do the work.
+#
+# There's no change in terms of security risk with this process vs what we currently
+# do. In fact I current believe it has the exact same underlying security profile but
+# it if all the above was in place we'd be able to react faster when we need to.
+#
+#
+
+FROM public.ecr.aws/amazonlinux/amazonlinux:minimal as stage1
+
+ARG APP_NAME
+ARG APP_VERSION
+
+WORKDIR /opt/app-root
+
+# install just the tooling we'll need to for the next step.
+RUN dnf update -y \
+ && dnf install -y \
+      tar \
+      gzip \
+      findutils \
+      awscli-2 \
+      tree \
+ && dnf clean -y all
+
+# do this in stages so we can cache the layers.
+FROM stage1
+
+ENV AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws
+ENV AWS_DEFAULT_OUTPUT=json
+ENV AWS_DEFAULT_REGION=us-east-1
+ENV AWS_DEFAULT_PROFILE=cicd
+
+# fetch the *.tgz, extract it and install the packages it requires.
+RUN --mount=type=secret,id=aws,required true \
+ && aws s3 cp s3://metaspot.org/${APP_NAME}_v${APP_VERSION}_al23_$(uname -m).tar.gz /tmp/app.tgz \
+ && tar -xzpf /tmp/app.tgz --strip-components=1 -C /opt/app-root \
+ && chown -R 1000:1000 /opt/app-root \
+ && xargs -a /opt/app-root/.a2i/packages.prod dnf install -y \
+ && dnf clean -y all \
+ && rm /tmp/app.tgz
+
+# Of course this is all also enforced when the container is run
+USER 1000:1000
+WORKDIR /opt/app-root
+ENTRYPOINT ["/usr/bin/sh", "-r", "-x", "/opt/app-root/launch.sh"]

@@ -1,6 +1,6 @@
-APPNAME=demo-app
-TAGNAME=$(shell ruby -Ilib -r 'demo/app/version' -e 'puts Demo::App::VERSION')
-GITHASH=$(shell git rev-parse --short HEAD)
+APP_NAME=demo-app
+APP_VERSION=$(shell ruby -Ilib -r 'demo/app/version' -e 'puts Demo::App::VERSION')
+GIT_HASH=$(shell git rev-parse --short HEAD)
 
 .PHONY: default
 default:
@@ -28,13 +28,19 @@ cache:
 	bundle cache --all-platforms
 	bundle show
 
+#  DOCKER_BUILDKIT=0 \
+
 .PHONY: build
 build: init cache
 	docker build \
-		--secret id=token,env=TOKEN \
-		--build-arg APPNAME=$(APPNAME) \
+		--file Dockerfile \
+		--progress=plain \
+		--secret id=aws,src=/home/mgreenly/.aws/credentials \
+		--build-arg APP_NAME=$(APP_NAME) \
+		--build-arg APP_VERSION=$(APP_VERSION) \
 		--build-arg RELEASE=false \
-		-t "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)" .
+		-t "localhost/$(APP_NAME):$(APP_VERSION)-$(GIT_HASH)" .
+	# docker buildx prune -f
 
 .PHONY: release
 release: init cache
@@ -42,14 +48,37 @@ ifneq ("", $(shell git status -z))
 	bundle cache --all-platforms
 	bundle show
 	docker build \
-		--secret id=credentials,src=$HOME/.aws/credentials \
-		--build-arg APPNAME=$(APPNAME) \
+		--file Dockerfile \
+		--progress=plain \
+		--secret id=aws,src=/home/mgreenly/.aws/credentials \
+		--build-arg APP_NAME=$(APP_NAME) \
+		--build-arg APP_VERSION=$(APP_VERSION) \
 		--build-arg RELEASE=true \
-		-t "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)" .
+		-t "localhost/$(APP_NAME):$(APP_VERSION)-$(GIT_HASH)" .
 else
 	$(error "There are uncommitted changes!")
 endif
 
+.PHONY: validate
+validate: init cache
+	docker build \
+		--file Dockerfile.a2i \
+		--no-cache \
+		--progress=plain \
+		--secret id=aws,src=/home/mgreenly/.aws/credentials \
+		--build-arg APP_NAME=$(APP_NAME) \
+		--build-arg APP_VERSION=$(APP_VERSION) \
+		--build-arg RELEASE=false \
+		-t "localhost/a2i:latest" .
+	docker run -it --rm \
+		--user=root \
+		--workdir=/opt/app-root \
+    --entrypoint=/usr/bin/sh \
+		localhost/a2i:latest -r -x /opt/app-root/launch.sh
+
+
+
+
 .PHONY: run
 run:
-	docker run -it --rm "localhost/$(APPNAME):$(TAGNAME)-$(GITHASH)"
+	docker run -it --rm "localhost/$(APP_NAME):$(APP_VERSION)-$(GIT_HASH)"

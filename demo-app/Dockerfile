@@ -20,18 +20,20 @@
 # the dev teams create to a generic language agnostic base image.
 #
 
-
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS stage1
 
 ARG RELEASE=false
-ARG APPNAME
+ARG APP_NAME
+ARG APP_VERSION
 
 # This step installs all the platorm development tools and libraries. These never
 # change from one ruby app to the next.
 RUN dnf update -y \
  && dnf group install -y 'Development Tools' \
- && dnf install -y findutils \
+ && dnf install -y findutils awscli-2\
  && dnf clean -y all
+
+# https://docs.aws.amazon.com/linux/al2023/release-notes/all-packages-AL2023.6.html
 
 #
 # For stage2 we'd actually grab the image from where ever we pushed it during
@@ -41,85 +43,59 @@ RUN dnf update -y \
 FROM stage1 AS stage2
 
 # This step adds all the files we need to build the app.
-COPY ./.bundle                 /opt/app-root/.bundle
-COPY ./bin                     /opt/app-root/bin
-COPY ./lib                     /opt/app-root/lib
-COPY ./vendor                  /opt/app-root/vendor
-#COPY ./*.gemspec               /opt/app-root/*.gemspec
-COPY ./${APPNAME}.gemspec      /opt/app-root/${APPNAME}.gemspec
-COPY ./Gemfile                 /opt/app-root/Gemfile
-COPY ./Gemfile.lock            /opt/app-root/Gemfile.lock
-COPY ./launch.sh               /opt/app-root/launch.sh
-COPY ./.a2i/packages.prod      /opt/app-root/packages.prod
-COPY ./.a2i/packages.dev       /opt/app-root/packages.dev
+COPY ./.bundle                 /tmp/app-root/.bundle
+COPY ./.a2i                    /tmp/app-root/.a2i
+COPY ./bin                     /tmp/app-root/bin
+COPY ./lib                     /tmp/app-root/lib
+COPY ./vendor                  /tmp/app-root/vendor
+COPY ./${APP_NAME}.gemspec      /tmp/app-root/${APP_NAME}.gemspec
+COPY ./Gemfile                 /tmp/app-root/Gemfile
+COPY ./Gemfile.lock            /tmp/app-root/Gemfile.lock
+COPY ./launch.sh               /tmp/app-root/launch.sh
+COPY ./launch.sh               /tmp/app-root/launch.sh1
 
 # This step adds all the native packages unique to this app.
-RUN xargs -a /opt/app-root/packages.prod dnf install -y \
- && xargs -a /opt/app-root/packages.dev dnf install -y \
+RUN xargs -a /tmp/app-root/.a2i/packages.prod dnf install -y \
+ && xargs -a /tmp/app-root/.a2i/packages.dev dnf install -y \
  && dnf clean -y all
 
 # This step sets up a non-root environment to build the app in
-RUN chown -R 1000:1000 /opt/app-root
+RUN chown -R 1000:1000 /tmp/app-root
 USER 1000:1000
-WORKDIR /opt/app-root
+WORKDIR /tmp/app-root
 
-# This step uses the previously installed native dev tools and libs to build the app
+ENV HOME=/tmp/app-root
+
+# This step builds all of the apps gems
 RUN bundle config --local deployment true \
  && bundle config --local without "development test" \
  && bundle install --local
 
 # This step builds the *.tgz
-RUN mkdir -p out/vendor \
- && cp -R bin out/bin \
- && cp -R lib out/lib \
- && cp -R .bundle out/.bundle \
- && cp -R vendor/ruby out/vendor/ruby \
- && cp ${APPNAME}.gemspec out/${APPNAME}.gemspec \
- && cp Gemfile out/Gemfile \
- && cp Gemfile.lock out/Gemfile.lock \
- && cp launch.sh out/launch.sh \
- && tar -czf /tmp/app.tar.gz -C ./out .
+USER root:root
 
-# This step would ship the *.tgz to Artifactory but I'm using S3 in my example
-RUN --mount=type=secret,id=token,env=TOKEN  \
-    if [ "${RELEASE}" = "true" ] ; then \
-      echo "... doing the release" ; \
-    fi
+RUN mkdir -p /tmp/${APP_NAME}_${APP_VERSION}/vendor /tmp/${APP_NAME}_${APP_VERSION}/vendor \
+ && cp -R /tmp/app-root/.a2i/              /tmp/${APP_NAME}_${APP_VERSION}/.a2i \
+ && cp -R /tmp/app-root/.bundle            /tmp/${APP_NAME}_${APP_VERSION}/.bundle \
+ && cp -R /tmp/app-root/bin                /tmp/${APP_NAME}_${APP_VERSION}/bin \
+ && cp -R /tmp/app-root/lib                /tmp/${APP_NAME}_${APP_VERSION}/lib \
+ && cp -R /tmp/app-root/vendor/ruby        /tmp/${APP_NAME}_${APP_VERSION}/vendor/ruby \
+ && cp /tmp/app-root/${APP_NAME}.gemspec   /tmp/${APP_NAME}_${APP_VERSION}/${APP_NAME}.gemspec \
+ && cp /tmp/app-root/Gemfile               /tmp/${APP_NAME}_${APP_VERSION}/Gemfile \
+ && cp /tmp/app-root/Gemfile.lock          /tmp/${APP_NAME}_${APP_VERSION}/Gemfile.lock \
+ && cp /tmp/app-root/launch.sh             /tmp/${APP_NAME}_${APP_VERSION}/launch.sh
 
-#
-# What follows here is just an example of extracting and using the *.tgz.  I
-# will evntually move this into a seprate docker process to better mirror what 
-# we'll be doing in the future.
-#
-# **NOTE** There doesn't have to be anything language platform specific about this
-# step. If we managed a *.rpm repo mirror we could allow the devteams to include a list
-# of packages in a text file that we enumerate over and install.  The packages could
-# only come from that controlled mirror that contains pre-approved/scanned packages.
-#
-# Although personally I'd suggest we just mirror the official repo so that we could
-# yank stuff if there's a CVE and AWS doesn't act quick enough.
-#
-
-FROM public.ecr.aws/amazonlinux/amazonlinux:minimal AS stage3
-
-COPY --from=stage2 /tmp/app.tar.gz /tmp/app.tar.gz
-COPY --from=stage2 /opt/app-root/packages.prod /tmp/packages.prod
-
-WORKDIR /opt/app-root
-
-RUN dnf update -y \
- && dnf install -y \
-      tar \
-      gzip \
-      findutils \
- && xargs -a /tmp/packages.prod dnf install -y \
- && dnf clean -y all \
- && chown -R 1000:1000 /opt/app-root \
- && tar -xzpf /tmp/app.tar.gz -C /opt/app-root \
- && rm /tmp/app.tar.gz
-
-USER 1000:1000
-WORKDIR /opt/app-root
-
-# the defined entrpoint for all *.tgz apps included by the dev team in the artifact.
-ENTRYPOINT ["/usr/bin/sh", "-r", "-x", "/opt/app-root/launch.sh"]
+# Ship the *.tgz to S3
+RUN --mount=type=secret,id=aws,required true \
+ && rm -rf /tmp/${APP_NAME}_${APP_VERSION}/.bundle/cache/ \
+ && rm -rf /tmp/${APP_NAME}_${APP_VERSION}/vendor/ruby/3.2.0/cache/ \
+ && tar -czvf /tmp/${APP_NAME}_v${APP_VERSION}_al23_$(uname -m).tar.gz -C /tmp ${APP_NAME}_${APP_VERSION} \
+ && if [ ${RELEASE} = "true" ] ; then \
+      AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws \
+      AWS_DEFAULT_OUTPUT=json \
+      AWS_DEFAULT_REGION=us-east-1 \
+      AWS_DEFAULT_PROFILE=cicd \
+      aws s3 cp /tmp/${APP_NAME}_v${APP_VERSION}_al23_$(uname -m).tar.gz s3://metaspot.org/${APP_NAME}_v${APP_VERSION}_al23_$(uname -m).tar.gz ; \
+     else \
+      echo "RELEASE=${RELEASE}; skipping push to s3" ; \
+     fi

@@ -1,0 +1,8 @@
+
+# This step would ship the *.tgz to Artifactory but I'm using S3 in my example
+RUN --mount=type=secret,id=credentials \
+    if [ "${RELEASE}" = "true" ] ; then \
+      AWS_SHARED_CREDENTIALS_FILE=/run/secrets/aws \
+      AWS_DEFAULT_PROFILE=cicd \
+      aws --prosts get-caller-identity \
+    fi
